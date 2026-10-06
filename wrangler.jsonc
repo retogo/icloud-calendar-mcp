@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "icloud-calendar-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "kv_namespaces": [{ "binding": "OAUTH_KV" }],
+  "ratelimits": [
+    {
+      "name": "AUTHORIZE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 5, "period": 60 }
+    }
+  ],
+  "secrets": {
+    "required": ["ICLOUD_USERNAME", "ICLOUD_APP_PASSWORD", "AUTH_PASSWORD"]
+  }
+}

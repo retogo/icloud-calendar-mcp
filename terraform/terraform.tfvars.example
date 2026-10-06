@@ -1,0 +1,4 @@
+account_id          = "your-cloudflare-account-id"
+icloud_username     = "you@icloud.com"
+icloud_app_password = "xxxx-xxxx-xxxx-xxxx"
+auth_password       = "a-long-random-passphrase"
