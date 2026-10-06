@@ -47,6 +47,7 @@ const calendar = (...lines: string[]) =>
 const OCTOBER = {
   start: new Date("2026-10-01T00:00:00Z"),
   end: new Date("2026-11-01T00:00:00Z"),
+  localOffsetSeconds: 0,
 };
 
 describe("parseEvents: single events", () => {
@@ -233,6 +234,7 @@ describe("parseEvents: recurring events", () => {
     const range = {
       start: new Date("2026-10-26T00:00:00Z"),
       end: new Date("2026-11-10T00:00:00Z"),
+      localOffsetSeconds: 0,
     };
     expect(
       parseEvents(ics, range, new RecurrenceBudget()).map((e) => e.start),
@@ -477,6 +479,7 @@ describe("parseEvents: TZID without VTIMEZONE", () => {
     const range = {
       start: new Date("2026-10-26T00:00:00Z"),
       end: new Date("2026-11-10T00:00:00Z"),
+      localOffsetSeconds: 0,
     };
 
     expect(
@@ -498,6 +501,7 @@ describe("parseEvents: TZID without VTIMEZONE", () => {
     const period = {
       start: new Date("2026-10-06T08:00:00Z"),
       end: new Date("2026-10-06T10:00:00Z"),
+      localOffsetSeconds: 0,
     };
 
     expect(
@@ -519,5 +523,113 @@ describe("parseEvents: TZID without VTIMEZONE", () => {
 
     expect(event?.start).toBe("2026-10-06T18:00:00");
     expect(event).not.toHaveProperty("timeZone");
+  });
+});
+
+const JST_OFFSET_SECONDS = 9 * 60 * 60;
+const jst = (start: string, end: string) => ({
+  start: new Date(`${start}+09:00`),
+  end: new Date(`${end}+09:00`),
+  localOffsetSeconds: JST_OFFSET_SECONDS,
+});
+
+describe("parseEvents: all-day and floating times in the user's time zone", () => {
+  // An all-day event on 10/17 only (DTEND is exclusive)
+  const onkura = withoutTimezones(
+    "BEGIN:VEVENT",
+    "UID:onkura",
+    "SUMMARY:Onkura",
+    "DTSTART;VALUE=DATE:20261017",
+    "DTEND;VALUE=DATE:20261018",
+    "END:VEVENT",
+  );
+
+  test.each([
+    [
+      "10/16 0:00 - 10/17 0:00",
+      "2026-10-16T00:00:00",
+      "2026-10-17T00:00:00",
+      false,
+    ],
+    [
+      "10/17 0:00 - 10/17 9:00",
+      "2026-10-17T00:00:00",
+      "2026-10-17T09:00:00",
+      true,
+    ],
+    [
+      "10/17 0:00 - 10/18 0:00",
+      "2026-10-17T00:00:00",
+      "2026-10-18T00:00:00",
+      true,
+    ],
+    [
+      "10/18 0:00 - 10/19 0:00",
+      "2026-10-18T00:00:00",
+      "2026-10-19T00:00:00",
+      false,
+    ],
+    [
+      "10/18 8:00 - 10/18 9:00",
+      "2026-10-18T08:00:00",
+      "2026-10-18T09:00:00",
+      false,
+    ],
+    [
+      "10/18 9:00 - 10/19 0:00",
+      "2026-10-18T09:00:00",
+      "2026-10-19T00:00:00",
+      false,
+    ],
+  ])(
+    "treats an all-day event as local midnight to midnight: %s JST",
+    (_, start, end, included) => {
+      const events = parseEvents(
+        onkura,
+        jst(start, end),
+        new RecurrenceBudget(),
+      );
+
+      expect(events.map((e) => e.uid)).toEqual(included ? ["onkura"] : []);
+    },
+  );
+
+  test("interprets floating times in the user's time zone", () => {
+    const ics = withoutTimezones(
+      "BEGIN:VEVENT",
+      "UID:float",
+      "SUMMARY:Wake up",
+      "DTSTART:20261018T083000",
+      "DTEND:20261018T084500",
+      "END:VEVENT",
+    );
+
+    expect(
+      parseEvents(
+        ics,
+        jst("2026-10-18T08:00:00", "2026-10-18T09:00:00"),
+        new RecurrenceBudget(),
+      ).map((e) => e.uid),
+    ).toEqual(["float"]);
+  });
+
+  test("expands recurring all-day events in the user's time zone", () => {
+    const ics = withoutTimezones(
+      "BEGIN:VEVENT",
+      "UID:daily",
+      "SUMMARY:Daily",
+      "DTSTART;VALUE=DATE:20261015",
+      "DTEND;VALUE=DATE:20261016",
+      "RRULE:FREQ=DAILY;COUNT=10",
+      "END:VEVENT",
+    );
+
+    expect(
+      parseEvents(
+        ics,
+        jst("2026-10-18T00:00:00", "2026-10-19T00:00:00"),
+        new RecurrenceBudget(),
+      ).map((e) => e.start),
+    ).toEqual(["2026-10-18"]);
   });
 });

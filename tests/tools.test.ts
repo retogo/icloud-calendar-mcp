@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Calendar, StoredEvent } from "../src/caldav-client.ts";
-import type { NewEvent, RecurrenceBudget } from "../src/ical.ts";
+import type { NewEvent, Period, RecurrenceBudget } from "../src/ical.ts";
 import { type CalendarStore, CalendarTools } from "../src/tools.ts";
 
 const WORK: Calendar = {
@@ -27,12 +27,14 @@ const event = (calendar: Calendar, start: string): StoredEvent => ({
 function fakeStore() {
   const calls: string[] = [];
   const budgets: RecurrenceBudget[] = [];
+  const periods: Period[] = [];
   const created: { calendarUrl: string; event: NewEvent; now: Date }[] = [];
   const store: CalendarStore = {
     listCalendars: async () => [WORK, HOME],
-    listEvents: async (calendarUrl, _start, _end, budget) => {
+    listEvents: async (calendarUrl, period, budget) => {
       calls.push(`listEvents ${calendarUrl}`);
       budgets.push(budget);
+      periods.push(period);
       if (calendarUrl === WORK.url) {
         return [event(WORK, "2026-10-06T10:00:00+09:00")];
       }
@@ -60,7 +62,7 @@ function fakeStore() {
     now: () => NOW,
     newUid: () => "generated-uid",
   });
-  return { tools, calls, budgets, created, updated };
+  return { tools, calls, budgets, periods, created, updated };
 }
 
 const STORED_ICS = [
@@ -152,6 +154,22 @@ describe("CalendarTools.listEvents", () => {
     expect(budgets[0]).toBe(budgets[1] as RecurrenceBudget);
     expect(skipped).toEqual([{ uid: "flood", summary: "Flood" }]);
   });
+
+  test.each([
+    ["2026-10-18T00:00:00+09:00", 9 * 60 * 60],
+    ["2026-10-18T00:00:00-04:30", -(4 * 60 + 30) * 60],
+    ["2026-10-18T00:00:00Z", 0],
+  ])(
+    "uses the offset of the requested start as the user's offset: %s",
+    async (start, offsetSeconds) => {
+      const { tools, periods } = fakeStore();
+
+      await tools.listEvents({ start, end: "2026-10-19T00:00:00+09:00" });
+
+      expect(periods[0]?.localOffsetSeconds).toBe(offsetSeconds);
+      expect(periods[0]?.start).toEqual(new Date(start));
+    },
+  );
 
   test("queries only the specified calendar", async () => {
     const { tools, calls } = fakeStore();

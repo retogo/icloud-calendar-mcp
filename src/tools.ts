@@ -2,6 +2,7 @@ import type { CalDavClient, Calendar, StoredEvent } from "./caldav-client.ts";
 import {
   applyEventChanges,
   type NewEvent,
+  type Period,
   RecurrenceBudget,
   type SkippedEvent,
 } from "./ical.ts";
@@ -64,6 +65,20 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_TIME_WITH_OFFSET =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 const ISO_DATE_LENGTH = 10;
+const UTC_OFFSET = /(?:Z|([+-])(\d{2}):(\d{2}))$/;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+
+function offsetSecondsOf(dateTime: string): number {
+  const match = UTC_OFFSET.exec(dateTime);
+  if (!match) {
+    throw new Error(`Date-time has no UTC offset: ${dateTime}`);
+  }
+  const [, sign, hours = "0", minutes = "0"] = match;
+  const seconds =
+    (Number(hours) * MINUTES_PER_HOUR + Number(minutes)) * SECONDS_PER_MINUTE;
+  return sign === "-" ? -seconds : seconds;
+}
 
 type PeriodKind = "date" | "dateTime";
 
@@ -116,12 +131,17 @@ export class CalendarTools {
     const targets = input.calendarUrls
       ? input.calendarUrls.map((url) => findCalendar(calendars, url))
       : calendars;
-    const start = new Date(input.start);
-    const end = new Date(input.end);
+    // The agent states the period in the user's local time, so its offset is
+    // the user's offset for all-day dates and floating times
+    const period: Period = {
+      start: new Date(input.start),
+      end: new Date(input.end),
+      localOffsetSeconds: offsetSecondsOf(input.start),
+    };
     const budget = new RecurrenceBudget();
     const events = await Promise.all(
       targets.map(async (calendar) =>
-        (await this.store.listEvents(calendar.url, start, end, budget)).map(
+        (await this.store.listEvents(calendar.url, period, budget)).map(
           (event) => ({ ...event, calendar: calendar.name }),
         ),
       ),

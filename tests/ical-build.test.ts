@@ -69,6 +69,7 @@ describe("buildEvent", () => {
     const day = {
       start: new Date("2026-10-06T00:00:00Z"),
       end: new Date("2026-10-07T00:00:00Z"),
+      localOffsetSeconds: 0,
     };
     expect(parseEvents(ics, day, new RecurrenceBudget())).toEqual([event]);
   });

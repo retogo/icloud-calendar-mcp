@@ -19,6 +19,8 @@ export type CalendarEvent = {
 export type Period = {
   start: Date;
   end: Date;
+  /** UTC offset of the user, used for all-day dates and floating times */
+  localOffsetSeconds: number;
 };
 
 type Occurrence = {
@@ -36,6 +38,7 @@ export type SkippedEvent = {
 const MAX_ITERATIONS_PER_EVENT = 20_000;
 const MAX_ITERATIONS_PER_REQUEST = 100_000;
 const MILLISECONDS_PER_SECOND = 1000;
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * MILLISECONDS_PER_SECOND;
 
 /**
  * Bounds the CPU spent expanding recurrences for one request. Events that
@@ -97,11 +100,30 @@ function timeZoneOf(time: ICAL.Time): string | undefined {
     : time.zone.tzid;
 }
 
+/** All-day dates and floating times are wall-clock times of the user */
+function instantMs(time: ICAL.Time, period: Period): number {
+  if (!time.isDate && !isFloating(time)) {
+    return time.toJSDate().getTime();
+  }
+  const wallMs = Date.UTC(
+    time.year,
+    time.month - 1,
+    time.day,
+    time.isDate ? 0 : time.hour,
+    time.isDate ? 0 : time.minute,
+    time.isDate ? 0 : time.second,
+  );
+  return wallMs - period.localOffsetSeconds * MILLISECONDS_PER_SECOND;
+}
+
 /** Zero-length events count when they start inside the period */
 function overlaps(occurrence: Occurrence, period: Period): boolean {
-  const start = occurrence.startDate.toJSDate();
-  const end = occurrence.endDate.toJSDate();
-  return start < period.end && (end > period.start || start >= period.start);
+  const start = instantMs(occurrence.startDate, period);
+  const end = instantMs(occurrence.endDate, period);
+  const periodStart = period.start.getTime();
+  return (
+    start < period.end.getTime() && (end > periodStart || start >= periodStart)
+  );
 }
 
 function toCalendarEvent({
@@ -136,12 +158,18 @@ function occurrencesOf(
       { item: event, startDate: event.startDate, endDate: event.endDate },
     ];
   }
-  const periodEnd = ICAL.Time.fromJSDate(period.end, true);
+  // ICAL.Time compares dates and floating times as UTC, so widen the bounds
+  // by a day and let `overlaps` decide with the user's offset
+  const periodEnd = ICAL.Time.fromJSDate(
+    new Date(period.end.getTime() + MILLISECONDS_PER_DAY),
+    true,
+  );
   // Unmodified occurrences starting earlier end before the period begins
   const windowStart = ICAL.Time.fromJSDate(
     new Date(
       period.start.getTime() -
-        event.duration.toSeconds() * MILLISECONDS_PER_SECOND,
+        event.duration.toSeconds() * MILLISECONDS_PER_SECOND -
+        MILLISECONDS_PER_DAY,
     ),
     true,
   );

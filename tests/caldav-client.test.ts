@@ -100,7 +100,7 @@ describe("CalDavClient.listCalendars", () => {
 });
 
 describe("CalDavClient.listEvents", () => {
-  test("queries the range in UTC and returns expanded recurring events", async () => {
+  test("queries a day around the period and returns events overlapping it", async () => {
     const { client: caldav, requests } = client({
       [`REPORT ${WORK}`]: () =>
         multistatus(
@@ -112,8 +112,11 @@ describe("CalDavClient.listEvents", () => {
 
     const events = await caldav.listEvents(
       WORK,
-      new Date("2026-10-06T00:00:00+09:00"),
-      new Date("2026-10-07T00:00:00+09:00"),
+      {
+        start: new Date("2026-10-06T00:00:00+09:00"),
+        end: new Date("2026-10-07T00:00:00+09:00"),
+        localOffsetSeconds: 9 * 60 * 60,
+      },
       new RecurrenceBudget(),
     );
 
@@ -134,8 +137,10 @@ describe("CalDavClient.listEvents", () => {
     // iCloud drop VTIMEZONE without converting times to UTC
     expect(request?.body).toContain("<c:calendar-data/>");
     expect(request?.body).not.toContain("<c:expand");
+    // Widened by a day on each side; the server may compare all-day events
+    // in UTC, and parseEvents filters to the exact period
     expect(request?.body).toContain(
-      '<c:time-range start="20261005T150000Z" end="20261006T150000Z"/>',
+      '<c:time-range start="20261004T150000Z" end="20261007T150000Z"/>',
     );
   });
 });

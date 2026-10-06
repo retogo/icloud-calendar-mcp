@@ -2,6 +2,7 @@ import {
   buildEvent,
   type CalendarEvent,
   type NewEvent,
+  type Period,
   parseEvents,
   type RecurrenceBudget,
 } from "./ical.ts";
@@ -44,6 +45,7 @@ const NAMESPACES =
   'xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:ic="http://apple.com/ns/ical/"';
 const XML_DECLARATION = '<?xml version="1.0" encoding="utf-8"?>';
 const CALENDAR_CONTENT_TYPE = "text/calendar; charset=utf-8";
+const QUERY_MARGIN_MS = 24 * 60 * 60 * 1000;
 const ISO_SEPARATORS = /[-:]|\.\d{3}/g;
 const EVENT_COMPONENT = "VEVENT";
 
@@ -129,22 +131,26 @@ export class CalDavClient {
 
   async listEvents(
     calendarUrl: string,
-    start: Date,
-    end: Date,
+    period: Period,
     budget: RecurrenceBudget,
   ): Promise<StoredEvent[]> {
+    // The server may judge all-day events in UTC; widen the query and let
+    // parseEvents filter in the user's time zone
     const responses = await this.multistatus(
       "REPORT",
       calendarUrl,
       "1",
-      eventsQuery(start, end),
+      eventsQuery(
+        new Date(period.start.getTime() - QUERY_MARGIN_MS),
+        new Date(period.end.getTime() + QUERY_MARGIN_MS),
+      ),
     );
     return responses.flatMap((response) => {
       const data = response.props["calendar-data"];
       const etag = response.props.getetag;
       if (typeof data !== "string") return [];
       const url = new URL(response.href, calendarUrl).href;
-      return parseEvents(data, { start, end }, budget).map((event) => ({
+      return parseEvents(data, period, budget).map((event) => ({
         url,
         etag: typeof etag === "string" ? etag : "",
         ...event,
