@@ -1,9 +1,19 @@
 import type { CalDavClient, Calendar, StoredEvent } from "./caldav-client.ts";
-import { type NewEvent, RecurrenceBudget, type SkippedEvent } from "./ical.ts";
+import {
+  applyEventChanges,
+  type NewEvent,
+  RecurrenceBudget,
+  type SkippedEvent,
+} from "./ical.ts";
 
 export type CalendarStore = Pick<
   CalDavClient,
-  "listCalendars" | "listEvents" | "createEvent" | "deleteEvent"
+  | "listCalendars"
+  | "listEvents"
+  | "createEvent"
+  | "deleteEvent"
+  | "getEvent"
+  | "updateEvent"
 >;
 
 export type ListEventsInput = {
@@ -24,6 +34,17 @@ export type CreateEventInput = {
 
 export type DeleteEventInput = {
   eventUrl: string;
+};
+
+/** Omitted fields stay as they are; `null` removes location or description */
+export type UpdateEventInput = {
+  eventUrl: string;
+  summary?: string;
+  /** Give both or neither; dates (YYYY-MM-DD) make it an all-day event */
+  start?: string;
+  end?: string;
+  location?: string | null;
+  description?: string | null;
 };
 
 export type ListedEvent = StoredEvent & { calendar: string };
@@ -135,13 +156,39 @@ export class CalendarTools {
     return { url, uid: event.uid };
   }
 
+  async updateEvent(input: UpdateEventInput): Promise<{ updated: string }> {
+    const { eventUrl: rawUrl, start, end, ...text } = input;
+    const period =
+      start === undefined && end === undefined
+        ? {}
+        : {
+            start: start ?? "",
+            end: end ?? "",
+            allDay: isAllDayPeriod(start ?? "", end ?? ""),
+          };
+    const eventUrl = await this.ownedEventUrl(rawUrl);
+    const current = await this.store.getEvent(eventUrl);
+    const data = applyEventChanges(
+      current.data,
+      { ...text, ...period },
+      this.dependencies.now(),
+    );
+    await this.store.updateEvent(eventUrl, data, current.etag);
+    return { updated: eventUrl };
+  }
+
   async deleteEvent(input: DeleteEventInput): Promise<void> {
+    await this.store.deleteEvent(await this.ownedEventUrl(input.eventUrl));
+  }
+
+  /** Normalized URL of an event directly inside one of the owner's calendars */
+  private async ownedEventUrl(rawUrl: string): Promise<string> {
     const calendars = await this.store.listCalendars();
-    const eventUrl = new URL(input.eventUrl);
+    const eventUrl = new URL(rawUrl);
     if (!calendars.some((calendar) => isEventOf(calendar, eventUrl))) {
-      throw new Error(`Unknown event: ${input.eventUrl}`);
+      throw new Error(`Unknown event: ${rawUrl}`);
     }
-    await this.store.deleteEvent(eventUrl.href);
+    return eventUrl.href;
   }
 }
 

@@ -167,6 +167,49 @@ describe("CalDavClient.createEvent", () => {
   });
 });
 
+describe("CalDavClient.getEvent", () => {
+  test("returns the calendar data and its ETag", async () => {
+    const { client: caldav } = client({
+      [`GET ${WORK}a.ics`]: () =>
+        new Response("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n", {
+          headers: { ETag: '"e1"' },
+        }),
+    });
+
+    expect(await caldav.getEvent(`${WORK}a.ics`)).toEqual({
+      data: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
+      etag: '"e1"',
+    });
+  });
+});
+
+describe("CalDavClient.updateEvent", () => {
+  test("replaces the event only if it still has the given ETag", async () => {
+    const { client: caldav, requests } = client({
+      [`PUT ${WORK}a.ics`]: () => new Response(null, { status: 204 }),
+    });
+
+    await caldav.updateEvent(`${WORK}a.ics`, "BEGIN:VCALENDAR", '"e1"');
+
+    const [request] = requests;
+    expect(request?.headers.get("If-Match")).toBe('"e1"');
+    expect(request?.headers.get("Content-Type")).toBe(
+      "text/calendar; charset=utf-8",
+    );
+    expect(request?.body).toBe("BEGIN:VCALENDAR");
+  });
+
+  test("fails when the event changed since it was read", async () => {
+    const { client: caldav } = client({
+      [`PUT ${WORK}a.ics`]: () => new Response(null, { status: 412 }),
+    });
+
+    await expect(
+      caldav.updateEvent(`${WORK}a.ics`, "BEGIN:VCALENDAR", '"old"'),
+    ).rejects.toThrow(`PUT ${WORK}a.ics failed: 412`);
+  });
+});
+
 describe("CalDavClient.deleteEvent", () => {
   test("sends DELETE to the event's URL", async () => {
     const { client: caldav, requests } = client({

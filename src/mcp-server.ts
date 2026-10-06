@@ -72,6 +72,30 @@ export function createMcpServer(tools: CalendarTools): McpServer {
   );
 
   server.registerTool(
+    "update_event",
+    {
+      title: "Update event",
+      description:
+        "Change fields of an event by the `url` returned by list_events. Omitted fields stay as they are; `null` removes location or description. Give `start` and `end` together, in the same form as create_event. Alarms, attendees, and recurrence rules are kept. Updating a recurring event changes the whole series. Fails if the event changed elsewhere since it was read.",
+      inputSchema: z.object({
+        eventUrl: z.url(),
+        summary: z.string().min(1).optional(),
+        start: periodBoundary.optional(),
+        end: periodBoundary.optional(),
+        location: z.string().nullable().optional(),
+        description: z.string().nullable().optional(),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (input) => json(await tools.updateEvent(input)),
+  );
+
+  server.registerTool(
     "delete_event",
     {
       title: "Delete event",

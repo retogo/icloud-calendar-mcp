@@ -232,6 +232,77 @@ function expandEvents(
 
 export type NewEvent = Omit<CalendarEvent, "timeZone">;
 
+/** Omitted fields stay as they are; `null` removes a field */
+export type EventChanges = {
+  summary?: string;
+  location?: string | null;
+  description?: string | null;
+} & (
+  | { start: string; end: string; allDay: boolean }
+  | { start?: undefined; end?: undefined; allDay?: undefined }
+);
+
+const ANY_LINE_BREAK = /\r\n?/g;
+
+function setText(
+  component: ICAL.Component,
+  name: string,
+  value: string | null | undefined,
+): void {
+  if (value === undefined) return;
+  if (value === null) {
+    component.removeAllProperties(name);
+    return;
+  }
+  component.updatePropertyWithValue(name, value.replace(ANY_LINE_BREAK, "\n"));
+}
+
+function setBoundary(
+  component: ICAL.Component,
+  name: string,
+  value: string,
+  allDay: boolean,
+): void {
+  const property = new ICAL.Property(name);
+  property.setValue(
+    allDay
+      ? ICAL.Time.fromDateString(value)
+      : ICAL.Time.fromJSDate(new Date(value), true),
+  );
+  component.removeAllProperties(name);
+  component.addProperty(property);
+}
+
+/**
+ * Edits the series (the VEVENT without RECURRENCE-ID) in place so that
+ * alarms, attendees, recurrence rules and overridden occurrences survive
+ */
+export function applyEventChanges(
+  ics: string,
+  changes: EventChanges,
+  now: Date,
+): string {
+  const calendar = new ICAL.Component(ICAL.parse(ics));
+  const series = calendar
+    .getAllSubcomponents("vevent")
+    .find((component) => !component.hasProperty("recurrence-id"));
+  if (!series) {
+    throw new Error("The event has no series to update");
+  }
+  setText(series, "summary", changes.summary);
+  setText(series, "location", changes.location);
+  setText(series, "description", changes.description);
+  if (changes.start !== undefined) {
+    setBoundary(series, "dtstart", changes.start, changes.allDay);
+    setBoundary(series, "dtend", changes.end, changes.allDay);
+    series.removeAllProperties("duration");
+  }
+  const sequence = Number(series.getFirstPropertyValue("sequence") ?? 0);
+  series.updatePropertyWithValue("sequence", sequence + 1);
+  series.updatePropertyWithValue("dtstamp", ICAL.Time.fromJSDate(now, true));
+  return calendar.toString();
+}
+
 const PRODID = "-//icloud-calendar-mcp//EN";
 const CRLF = "\r\n";
 const MAX_LINE_OCTETS = 75;

@@ -46,13 +46,84 @@ function fakeStore() {
     deleteEvent: async (eventUrl) => {
       calls.push(`deleteEvent ${eventUrl}`);
     },
+    getEvent: async (eventUrl) => {
+      calls.push(`getEvent ${eventUrl}`);
+      return { data: STORED_ICS, etag: '"e1"' };
+    },
+    updateEvent: async (eventUrl, data, etag) => {
+      calls.push(`updateEvent ${eventUrl} ${etag}`);
+      updated.push(data);
+    },
   };
+  const updated: string[] = [];
   const tools = new CalendarTools(store, {
     now: () => NOW,
     newUid: () => "generated-uid",
   });
-  return { tools, calls, budgets, created };
+  return { tools, calls, budgets, created, updated };
 }
+
+const STORED_ICS = [
+  "BEGIN:VCALENDAR",
+  "VERSION:2.0",
+  "BEGIN:VEVENT",
+  "UID:a",
+  "DTSTAMP:20261001T000000Z",
+  "DTSTART:20261006T010000Z",
+  "DTEND:20261006T020000Z",
+  "SUMMARY:Sync",
+  "END:VEVENT",
+  "END:VCALENDAR",
+].join("\r\n");
+
+describe("CalendarTools.updateEvent", () => {
+  test("applies the changes and writes back with the ETag it read", async () => {
+    const { tools, calls, updated } = fakeStore();
+    const eventUrl = `${WORK.url}a.ics`;
+
+    const result = await tools.updateEvent({
+      eventUrl,
+      summary: "Weekly sync",
+      start: "2026-10-06T11:00:00+09:00",
+      end: "2026-10-06T12:00:00+09:00",
+    });
+
+    expect(result).toEqual({ updated: eventUrl });
+    expect(calls).toEqual([
+      `getEvent ${eventUrl}`,
+      `updateEvent ${eventUrl} "e1"`,
+    ]);
+    const lines = updated[0]?.split("\r\n");
+    expect(lines).toContain("SUMMARY:Weekly sync");
+    expect(lines).toContain("DTSTART:20261006T020000Z");
+  });
+
+  test("rejects URLs outside the owner's calendars without any request", async () => {
+    const { tools, calls } = fakeStore();
+    const eventUrl = "https://attacker.example/123/calendars/work/a.ics";
+
+    await expect(tools.updateEvent({ eventUrl, summary: "x" })).rejects.toThrow(
+      `Unknown event: ${eventUrl}`,
+    );
+    expect(calls).toEqual([]);
+  });
+
+  test.each([
+    [{ start: "2026-10-06T11:00:00+09:00" }],
+    [{ end: "2026-10-06T12:00:00+09:00" }],
+    [{ start: "2026-10-10", end: "2026-10-11T00:00:00Z" }],
+  ])(
+    "rejects an incomplete or mixed period without any request: %o",
+    async (period) => {
+      const { tools, calls } = fakeStore();
+
+      await expect(
+        tools.updateEvent({ eventUrl: `${WORK.url}a.ics`, ...period }),
+      ).rejects.toThrow("Invalid event period");
+      expect(calls).toEqual([]);
+    },
+  );
+});
 
 describe("CalendarTools.listEvents", () => {
   test("returns events from all calendars in chronological order across offsets", async () => {

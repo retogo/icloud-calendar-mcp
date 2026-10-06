@@ -43,6 +43,7 @@ export class CalDavError extends Error {
 const NAMESPACES =
   'xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:ic="http://apple.com/ns/ical/"';
 const XML_DECLARATION = '<?xml version="1.0" encoding="utf-8"?>';
+const CALENDAR_CONTENT_TYPE = "text/calendar; charset=utf-8";
 const ISO_SEPARATORS = /[-:]|\.\d{3}/g;
 const EVENT_COMPONENT = "VEVENT";
 
@@ -162,12 +163,35 @@ export class CalDavClient {
       "PUT",
       url,
       {
-        "Content-Type": "text/calendar; charset=utf-8",
+        "Content-Type": CALENDAR_CONTENT_TYPE,
         "If-None-Match": "*",
       },
       buildEvent(event, now),
     );
     return url;
+  }
+
+  async getEvent(eventUrl: string): Promise<{ data: string; etag: string }> {
+    const response = await this.request("GET", eventUrl, {});
+    const etag = response.headers.get("ETag");
+    if (etag === null) {
+      throw new Error(`GET ${eventUrl} returned no ETag`);
+    }
+    return { data: await response.text(), etag };
+  }
+
+  /** Replaces the event only if it still has `etag`, so concurrent edits are not lost */
+  async updateEvent(
+    eventUrl: string,
+    data: string,
+    etag: string,
+  ): Promise<void> {
+    await this.request(
+      "PUT",
+      eventUrl,
+      { "Content-Type": CALENDAR_CONTENT_TYPE, "If-Match": etag },
+      data,
+    );
   }
 
   async deleteEvent(eventUrl: string): Promise<void> {
