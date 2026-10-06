@@ -3,6 +3,7 @@ import {
   type CalendarEvent,
   type NewEvent,
   parseEvents,
+  type RecurrenceBudget,
 } from "./ical.ts";
 import {
   type DavResponse,
@@ -129,6 +130,7 @@ export class CalDavClient {
     calendarUrl: string,
     start: Date,
     end: Date,
+    budget: RecurrenceBudget,
   ): Promise<StoredEvent[]> {
     const responses = await this.multistatus(
       "REPORT",
@@ -141,7 +143,7 @@ export class CalDavClient {
       const etag = response.props.getetag;
       if (typeof data !== "string") return [];
       const url = new URL(response.href, calendarUrl).href;
-      return parseEvents(data, { start, end }).map((event) => ({
+      return parseEvents(data, { start, end }, budget).map((event) => ({
         url,
         etag: typeof etag === "string" ? etag : "",
         ...event,

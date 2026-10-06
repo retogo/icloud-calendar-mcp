@@ -32,7 +32,7 @@ export function createMcpServer(tools: CalendarTools): McpServer {
     {
       title: "List events",
       description:
-        "List events in a period, ordered by start. Recurring events are expanded into occurrences. Timed events are ISO 8601 date-times with an explicit offset (`Z` or e.g. `+09:00`) plus `timeZone` when the event has one; compare them as instants, not strings. All-day events are dates with an exclusive `end`.",
+        "List events in a period, ordered by start. Recurring events are expanded into occurrences. Timed events are ISO 8601 date-times with an explicit offset (`Z` or e.g. `+09:00`) plus `timeZone` when the event has one; compare them as instants, not strings. All-day events are dates with an exclusive `end`. Returns `{ events, skipped }`; `skipped` lists recurring events too expensive to expand, which are missing from `events`.",
       inputSchema: z.object({
         start: dateTimeWithOffset.describe(
           "Start of the period as ISO 8601 with an offset, e.g. 2026-10-06T00:00:00+09:00",

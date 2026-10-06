@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Calendar, StoredEvent } from "../src/caldav-client.ts";
-import type { NewEvent } from "../src/ical.ts";
+import type { NewEvent, RecurrenceBudget } from "../src/ical.ts";
 import { type CalendarStore, CalendarTools } from "../src/tools.ts";
 
 const WORK: Calendar = {
@@ -26,14 +26,18 @@ const event = (calendar: Calendar, start: string): StoredEvent => ({
 
 function fakeStore() {
   const calls: string[] = [];
+  const budgets: RecurrenceBudget[] = [];
   const created: { calendarUrl: string; event: NewEvent; now: Date }[] = [];
   const store: CalendarStore = {
     listCalendars: async () => [WORK, HOME],
-    listEvents: async (calendarUrl) => {
+    listEvents: async (calendarUrl, _start, _end, budget) => {
       calls.push(`listEvents ${calendarUrl}`);
-      return calendarUrl === WORK.url
-        ? [event(WORK, "2026-10-06T10:00:00+09:00")]
-        : [event(HOME, "2026-10-06T03:00:00Z")];
+      budgets.push(budget);
+      if (calendarUrl === WORK.url) {
+        return [event(WORK, "2026-10-06T10:00:00+09:00")];
+      }
+      budget.skip({ uid: "flood", summary: "Flood" });
+      return [event(HOME, "2026-10-06T03:00:00Z")];
     },
     createEvent: async (calendarUrl, newEvent, now) => {
       created.push({ calendarUrl, event: newEvent, now });
@@ -47,14 +51,14 @@ function fakeStore() {
     now: () => NOW,
     newUid: () => "generated-uid",
   });
-  return { tools, calls, created };
+  return { tools, calls, budgets, created };
 }
 
 describe("CalendarTools.listEvents", () => {
   test("returns events from all calendars in chronological order across offsets", async () => {
     const { tools } = fakeStore();
 
-    const events = await tools.listEvents({
+    const { events } = await tools.listEvents({
       start: "2026-10-06T00:00:00+09:00",
       end: "2026-10-07T00:00:00+09:00",
     });
@@ -63,6 +67,19 @@ describe("CalendarTools.listEvents", () => {
       ["Work", "2026-10-06T10:00:00+09:00"],
       ["Home", "2026-10-06T03:00:00Z"],
     ]);
+  });
+
+  test("shares one recurrence budget across calendars and reports skipped events", async () => {
+    const { tools, budgets } = fakeStore();
+
+    const { skipped } = await tools.listEvents({
+      start: "2026-10-06T00:00:00+09:00",
+      end: "2026-10-07T00:00:00+09:00",
+    });
+
+    expect(budgets).toHaveLength(2);
+    expect(budgets[0]).toBe(budgets[1] as RecurrenceBudget);
+    expect(skipped).toEqual([{ uid: "flood", summary: "Flood" }]);
   });
 
   test("queries only the specified calendar", async () => {

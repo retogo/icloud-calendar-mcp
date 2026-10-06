@@ -1,5 +1,5 @@
 import type { CalDavClient, Calendar, StoredEvent } from "./caldav-client.ts";
-import type { NewEvent } from "./ical.ts";
+import { type NewEvent, RecurrenceBudget, type SkippedEvent } from "./ical.ts";
 
 export type CalendarStore = Pick<
   CalDavClient,
@@ -27,6 +27,12 @@ export type DeleteEventInput = {
 };
 
 export type ListedEvent = StoredEvent & { calendar: string };
+
+export type ListedEvents = {
+  events: ListedEvent[];
+  /** Recurring events too expensive to expand; they are missing from `events` */
+  skipped: SkippedEvent[];
+};
 
 type Dependencies = {
   now: () => Date;
@@ -84,23 +90,27 @@ export class CalendarTools {
     return this.store.listCalendars();
   }
 
-  async listEvents(input: ListEventsInput): Promise<ListedEvent[]> {
+  async listEvents(input: ListEventsInput): Promise<ListedEvents> {
     const calendars = await this.store.listCalendars();
     const targets = input.calendarUrls
       ? input.calendarUrls.map((url) => findCalendar(calendars, url))
       : calendars;
     const start = new Date(input.start);
     const end = new Date(input.end);
+    const budget = new RecurrenceBudget();
     const events = await Promise.all(
       targets.map(async (calendar) =>
-        (await this.store.listEvents(calendar.url, start, end)).map(
+        (await this.store.listEvents(calendar.url, start, end, budget)).map(
           (event) => ({ ...event, calendar: calendar.name }),
         ),
       ),
     );
-    return events
-      .flat()
-      .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+    return {
+      events: events
+        .flat()
+        .sort((a, b) => Date.parse(a.start) - Date.parse(b.start)),
+      skipped: budget.skipped,
+    };
   }
 
   async createEvent(

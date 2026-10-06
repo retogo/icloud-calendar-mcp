@@ -27,9 +27,41 @@ type Occurrence = {
   endDate: ICAL.Time;
 };
 
-/** Bounds CPU time per event; a daily rule reaches 137 years */
-const MAX_RECURRENCE_ITERATIONS = 50_000;
+export type SkippedEvent = {
+  uid: string;
+  summary: string;
+};
+
+/** A daily rule reaches 54 years before an event is skipped */
+const MAX_ITERATIONS_PER_EVENT = 20_000;
+const MAX_ITERATIONS_PER_REQUEST = 100_000;
 const MILLISECONDS_PER_SECOND = 1000;
+
+/**
+ * Bounds the CPU spent expanding recurrences for one request. Events that
+ * would exceed it are skipped and reported instead of failing the request.
+ */
+export class RecurrenceBudget {
+  readonly skipped: SkippedEvent[] = [];
+  #remaining: number;
+
+  constructor(limit = MAX_ITERATIONS_PER_REQUEST) {
+    this.#remaining = limit;
+  }
+
+  /** Consumes one iteration; false once the budget is spent */
+  take(): boolean {
+    if (this.#remaining === 0) {
+      return false;
+    }
+    this.#remaining--;
+    return true;
+  }
+
+  skip(event: SkippedEvent): void {
+    this.skipped.push(event);
+  }
+}
 const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_MINUTE = 60;
 const OFFSET_PAD = 2;
@@ -97,6 +129,7 @@ function occurrencesOf(
   event: ICAL.Event,
   modified: ReadonlySet<string>,
   period: Period,
+  budget: RecurrenceBudget,
 ): Occurrence[] {
   if (!event.isRecurring()) {
     return [
@@ -121,10 +154,9 @@ function occurrencesOf(
     next = iterator.next()
   ) {
     iterations++;
-    if (iterations > MAX_RECURRENCE_ITERATIONS) {
-      throw new RangeError(
-        `Recurring event ${event.uid} expands beyond ${MAX_RECURRENCE_ITERATIONS} occurrences before the period ends`,
-      );
+    if (iterations > MAX_ITERATIONS_PER_EVENT || !budget.take()) {
+      budget.skip({ uid: event.uid, summary: event.summary ?? "" });
+      return [];
     }
     if (next.compare(windowStart) >= 0 || modified.has(next.toString())) {
       occurrences.push(event.getOccurrenceDetails(next));
@@ -137,14 +169,18 @@ function occurrencesOf(
  * Parses calendar data into events overlapping `period`, expanding recurrence
  * rules so that servers which ignore CalDAV `expand` still yield occurrences
  */
-export function parseEvents(ics: string, period: Period): CalendarEvent[] {
+export function parseEvents(
+  ics: string,
+  period: Period,
+  budget: RecurrenceBudget,
+): CalendarEvent[] {
   const calendar = new ICAL.Component(ICAL.parse(ics));
   // The zone registry is global to the isolate; scope it to this calendar
   try {
     for (const zone of calendar.getAllSubcomponents("vtimezone")) {
       ICAL.TimezoneService.register(zone);
     }
-    return expandEvents(calendar, period);
+    return expandEvents(calendar, period, budget);
   } finally {
     ICAL.TimezoneService.reset();
   }
@@ -153,6 +189,7 @@ export function parseEvents(ics: string, period: Period): CalendarEvent[] {
 function expandEvents(
   calendar: ICAL.Component,
   period: Period,
+  budget: RecurrenceBudget,
 ): CalendarEvent[] {
   const components = calendar.getAllSubcomponents("vevent");
   const isException = (component: ICAL.Component) =>
@@ -186,7 +223,9 @@ function expandEvents(
     })),
   ];
   return events
-    .flatMap(({ event, modified }) => occurrencesOf(event, modified, period))
+    .flatMap(({ event, modified }) =>
+      occurrencesOf(event, modified, period, budget),
+    )
     .filter((occurrence) => overlaps(occurrence, period))
     .map(toCalendarEvent);
 }

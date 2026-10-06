@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildEvent, parseEvents } from "../src/ical.ts";
+import { buildEvent, parseEvents, RecurrenceBudget } from "../src/ical.ts";
 
 const MAX_LINE_OCTETS = 75;
 const now = new Date("2026-10-06T00:00:00Z");
@@ -70,7 +70,7 @@ describe("buildEvent", () => {
       start: new Date("2026-10-06T00:00:00Z"),
       end: new Date("2026-10-07T00:00:00Z"),
     };
-    expect(parseEvents(ics, day)).toEqual([event]);
+    expect(parseEvents(ics, day, new RecurrenceBudget())).toEqual([event]);
   });
 
   test("prevents property injection via CR / CRLF in text", () => {

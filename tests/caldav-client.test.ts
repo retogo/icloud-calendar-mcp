@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CalDavClient, CalDavError } from "../src/caldav-client.ts";
+import { RecurrenceBudget } from "../src/ical.ts";
 
 const SERVER = "https://caldav.icloud.com";
 const HOME = "https://p42-caldav.icloud.com:443/123/calendars/";
@@ -113,6 +114,7 @@ describe("CalDavClient.listEvents", () => {
       WORK,
       new Date("2026-10-06T00:00:00+09:00"),
       new Date("2026-10-07T00:00:00+09:00"),
+      new RecurrenceBudget(),
     );
 
     expect(events).toEqual([

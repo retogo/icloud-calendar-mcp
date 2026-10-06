@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseEvents } from "../src/ical.ts";
+import { parseEvents, RecurrenceBudget } from "../src/ical.ts";
 
 const TOKYO = [
   "BEGIN:VTIMEZONE",
@@ -62,7 +62,7 @@ describe("parseEvents: single events", () => {
       "END:VEVENT",
     );
 
-    expect(parseEvents(ics, OCTOBER)).toEqual([
+    expect(parseEvents(ics, OCTOBER, new RecurrenceBudget())).toEqual([
       {
         uid: "abc-123",
         summary: "Weekly sync",
@@ -85,7 +85,7 @@ describe("parseEvents: single events", () => {
       "END:VEVENT",
     );
 
-    const [event] = parseEvents(ics, OCTOBER);
+    const [event] = parseEvents(ics, OCTOBER, new RecurrenceBudget());
     expect(event?.start).toBe("2026-10-06T18:00:00+09:00");
     expect(event?.end).toBe("2026-10-06T20:00:00+09:00");
     expect(event?.timeZone).toBe("Asia/Tokyo");
@@ -101,7 +101,7 @@ describe("parseEvents: single events", () => {
       "END:VEVENT",
     );
 
-    const [event] = parseEvents(ics, OCTOBER);
+    const [event] = parseEvents(ics, OCTOBER, new RecurrenceBudget());
     expect(event?.start).toBe("2026-10-06T07:00:00");
     expect(event).not.toHaveProperty("timeZone");
   });
@@ -118,7 +118,7 @@ describe("parseEvents: single events", () => {
       "END:VEVENT",
     );
 
-    const [event] = parseEvents(ics, OCTOBER);
+    const [event] = parseEvents(ics, OCTOBER, new RecurrenceBudget());
     expect(event?.summary).toBe("A, B; C");
     expect(event?.description).toBe("Line one\nline two continued");
   });
@@ -133,7 +133,7 @@ describe("parseEvents: single events", () => {
       "END:VEVENT",
     );
 
-    expect(parseEvents(ics, OCTOBER)).toEqual([
+    expect(parseEvents(ics, OCTOBER, new RecurrenceBudget())).toEqual([
       {
         uid: "u2",
         summary: "Vacation",
@@ -153,7 +153,9 @@ describe("parseEvents: single events", () => {
       "END:VEVENT",
     );
 
-    expect(parseEvents(ics, OCTOBER)[0]?.end).toBe("2026-11-01");
+    expect(parseEvents(ics, OCTOBER, new RecurrenceBudget())[0]?.end).toBe(
+      "2026-11-01",
+    );
   });
 
   test("ends a timed event without DTEND at its start time", () => {
@@ -165,7 +167,9 @@ describe("parseEvents: single events", () => {
       "END:VEVENT",
     );
 
-    expect(parseEvents(ics, OCTOBER)[0]?.end).toBe("2026-10-06T01:00:00Z");
+    expect(parseEvents(ics, OCTOBER, new RecurrenceBudget())[0]?.end).toBe(
+      "2026-10-06T01:00:00Z",
+    );
   });
 
   test("ignores VALARM properties inside a VEVENT", () => {
@@ -183,7 +187,9 @@ describe("parseEvents: single events", () => {
       "END:VEVENT",
     );
 
-    expect(parseEvents(ics, OCTOBER)[0]).not.toHaveProperty("description");
+    expect(
+      parseEvents(ics, OCTOBER, new RecurrenceBudget())[0],
+    ).not.toHaveProperty("description");
   });
 });
 
@@ -200,7 +206,11 @@ describe("parseEvents: recurring events", () => {
     );
 
     expect(
-      parseEvents(ics, OCTOBER).map((e) => [e.uid, e.start, e.end]),
+      parseEvents(ics, OCTOBER, new RecurrenceBudget()).map((e) => [
+        e.uid,
+        e.start,
+        e.end,
+      ]),
     ).toEqual([
       ["weekly", "2026-10-06T09:30:00+09:00", "2026-10-06T09:45:00+09:00"],
       ["weekly", "2026-10-13T09:30:00+09:00", "2026-10-13T09:45:00+09:00"],
@@ -224,10 +234,9 @@ describe("parseEvents: recurring events", () => {
       start: new Date("2026-10-26T00:00:00Z"),
       end: new Date("2026-11-10T00:00:00Z"),
     };
-    expect(parseEvents(ics, range).map((e) => e.start)).toEqual([
-      "2026-10-27T09:00:00-04:00",
-      "2026-11-03T09:00:00-05:00",
-    ]);
+    expect(
+      parseEvents(ics, range, new RecurrenceBudget()).map((e) => e.start),
+    ).toEqual(["2026-10-27T09:00:00-04:00", "2026-11-03T09:00:00-05:00"]);
   });
 
   test("skips excluded dates", () => {
@@ -242,10 +251,9 @@ describe("parseEvents: recurring events", () => {
       "END:VEVENT",
     );
 
-    expect(parseEvents(ics, OCTOBER).map((e) => e.start)).toEqual([
-      "2026-10-05T10:00:00Z",
-      "2026-10-19T10:00:00Z",
-    ]);
+    expect(
+      parseEvents(ics, OCTOBER, new RecurrenceBudget()).map((e) => e.start),
+    ).toEqual(["2026-10-05T10:00:00Z", "2026-10-19T10:00:00Z"]);
   });
 
   test("applies modified occurrences", () => {
@@ -266,7 +274,12 @@ describe("parseEvents: recurring events", () => {
       "END:VEVENT",
     );
 
-    expect(parseEvents(ics, OCTOBER).map((e) => [e.summary, e.start])).toEqual([
+    expect(
+      parseEvents(ics, OCTOBER, new RecurrenceBudget()).map((e) => [
+        e.summary,
+        e.start,
+      ]),
+    ).toEqual([
       ["Review", "2026-10-05T10:00:00Z"],
       ["Review (moved)", "2026-10-13T15:00:00Z"],
     ]);
@@ -290,10 +303,9 @@ describe("parseEvents: recurring events", () => {
       "END:VEVENT",
     );
 
-    expect(parseEvents(ics, OCTOBER).map((e) => e.start)).toEqual([
-      "2026-10-06T01:00:00Z",
-      "2026-10-13T01:00:00Z",
-    ]);
+    expect(
+      parseEvents(ics, OCTOBER, new RecurrenceBudget()).map((e) => e.start),
+    ).toEqual(["2026-10-06T01:00:00Z", "2026-10-13T01:00:00Z"]);
   });
 
   test("expands recurring all-day events as dates", () => {
@@ -308,7 +320,11 @@ describe("parseEvents: recurring events", () => {
     );
 
     expect(
-      parseEvents(ics, OCTOBER).map((e) => [e.start, e.end, e.allDay]),
+      parseEvents(ics, OCTOBER, new RecurrenceBudget()).map((e) => [
+        e.start,
+        e.end,
+        e.allDay,
+      ]),
     ).toEqual([["2026-10-25", "2026-10-26", true]]);
   });
 
@@ -330,12 +346,15 @@ describe("parseEvents: recurring events", () => {
       "END:VEVENT",
     );
 
-    expect(parseEvents(ics, OCTOBER).map((e) => [e.summary, e.start])).toEqual([
-      ["Review (postponed)", "2026-10-02T10:00:00Z"],
-    ]);
+    expect(
+      parseEvents(ics, OCTOBER, new RecurrenceBudget()).map((e) => [
+        e.summary,
+        e.start,
+      ]),
+    ).toEqual([["Review (postponed)", "2026-10-02T10:00:00Z"]]);
   });
 
-  test("refuses rules that need too many iterations to reach the period", () => {
+  test("skips and reports an event whose rule needs too many iterations, keeping the rest", () => {
     const ics = calendar(
       "BEGIN:VEVENT",
       "UID:flood",
@@ -344,11 +363,40 @@ describe("parseEvents: recurring events", () => {
       "DURATION:PT1S",
       "RRULE:FREQ=SECONDLY",
       "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:normal",
+      "SUMMARY:Normal",
+      "DTSTART:20261006T010000Z",
+      "DTEND:20261006T020000Z",
+      "END:VEVENT",
     );
+    const budget = new RecurrenceBudget();
 
-    expect(() => parseEvents(ics, OCTOBER)).toThrow(
-      "Recurring event flood expands beyond",
-    );
+    const events = parseEvents(ics, OCTOBER, budget);
+
+    expect(events.map((e) => e.uid)).toEqual(["normal"]);
+    expect(budget.skipped).toEqual([{ uid: "flood", summary: "Flood" }]);
+  });
+
+  test("shares one budget across calendars and skips events once it runs out", () => {
+    const weekly = (uid: string) =>
+      calendar(
+        "BEGIN:VEVENT",
+        `UID:${uid}`,
+        "SUMMARY:Weekly",
+        "DTSTART:20260901T100000Z",
+        "DURATION:PT1H",
+        "RRULE:FREQ=WEEKLY",
+        "END:VEVENT",
+      );
+    const budget = new RecurrenceBudget(10);
+
+    const first = parseEvents(weekly("first"), OCTOBER, budget);
+    const second = parseEvents(weekly("second"), OCTOBER, budget);
+
+    expect(first).toHaveLength(4);
+    expect(second).toEqual([]);
+    expect(budget.skipped).toEqual([{ uid: "second", summary: "Weekly" }]);
   });
 });
 
@@ -385,8 +433,8 @@ describe("parseEvents: time zone definitions", () => {
       "END:VCALENDAR",
     ].join("\r\n");
 
-    parseEvents(poisoned, OCTOBER);
-    const [victim] = parseEvents(withoutZone, OCTOBER);
+    parseEvents(poisoned, OCTOBER, new RecurrenceBudget());
+    const [victim] = parseEvents(withoutZone, OCTOBER, new RecurrenceBudget());
 
     expect(victim?.start).not.toEndWith("+00:00");
   });
