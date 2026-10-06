@@ -8,12 +8,13 @@ There is no shared public instance. You deploy your own copy to your Cloudflare 
 
 ## Tools
 
-| Tool             | Description                                                       |
-| ---------------- | ----------------------------------------------------------------- |
-| `list_calendars` | Lists calendars that hold events (Reminders lists are excluded)   |
-| `list_events`    | Lists events in a period, with recurring events expanded          |
-| `create_event`   | Creates a timed or all-day event                                  |
-| `delete_event`   | Deletes an event (a recurring event is deleted as a whole series) |
+| Tool             | Description                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| `list_calendars` | Lists calendars that hold events (Reminders lists are excluded)                                    |
+| `list_events`    | Lists events in a period, with recurring events expanded and times given with their UTC offset     |
+| `create_event`   | Creates a timed or all-day event                                                                   |
+| `update_event`   | Changes the title, time, location, or description, keeping alarms, attendees, and recurrence rules |
+| `delete_event`   | Deletes an event                                                                                   |
 
 ## Requirements
 
@@ -50,7 +51,15 @@ There is no shared public instance. You deploy your own copy to your Cloudflare 
 
    The server is served at `https://icloud-calendar-mcp.<your-subdomain>.workers.dev/mcp`. Your `workers.dev` subdomain is shown on the Workers overview page of the dashboard.
 
-`terraform.tfvars` and the Terraform state contain your secrets. Both are git-ignored; keep them private.
+`terraform.tfvars` and the Terraform state contain your secrets. Both are git-ignored; keep them private, and keep the state in `terraform/` so later deploys update the same resources.
+
+To update to a newer version:
+
+```sh
+git pull
+bun install
+bun run deploy
+```
 
 ## Connect to Claude
 
@@ -76,4 +85,6 @@ A `PROPFIND ... failed: 401` result means the iCloud credentials are wrong.
 ## Limitations
 
 - Reminders are not available over CalDAV and are not supported.
-- Updating an existing event is not supported yet; delete and recreate it instead.
+- `update_event` and `delete_event` act on a recurring event as a whole series; single occurrences cannot be changed or removed on their own.
+- Recurring events that would take too many iterations to expand (for example, a rule repeating every second) are left out of `list_events` and reported in its `skipped` field.
+- Workers Free allows 10 ms of CPU per request. Expanding a daily event that has repeated for decades can exceed it; the request then fails.
