@@ -27,6 +27,9 @@ type Occurrence = {
   endDate: ICAL.Time;
 };
 
+/** Bounds CPU time per event; a daily rule reaches 137 years */
+const MAX_RECURRENCE_ITERATIONS = 50_000;
+const MILLISECONDS_PER_SECOND = 1000;
 const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_MINUTE = 60;
 const OFFSET_PAD = 2;
@@ -89,20 +92,43 @@ function toCalendarEvent({
   };
 }
 
-function occurrencesOf(event: ICAL.Event, period: Period): Occurrence[] {
+/** `modified` holds the RECURRENCE-IDs of overridden occurrences, which may move into the period */
+function occurrencesOf(
+  event: ICAL.Event,
+  modified: ReadonlySet<string>,
+  period: Period,
+): Occurrence[] {
   if (!event.isRecurring()) {
     return [
       { item: event, startDate: event.startDate, endDate: event.endDate },
     ];
   }
+  const periodEnd = ICAL.Time.fromJSDate(period.end, true);
+  // Unmodified occurrences starting earlier end before the period begins
+  const windowStart = ICAL.Time.fromJSDate(
+    new Date(
+      period.start.getTime() -
+        event.duration.toSeconds() * MILLISECONDS_PER_SECOND,
+    ),
+    true,
+  );
   const occurrences: Occurrence[] = [];
   const iterator = event.iterator();
+  let iterations = 0;
   for (
     let next = iterator.next();
-    next && next.toJSDate() < period.end;
+    next && next.compare(periodEnd) < 0;
     next = iterator.next()
   ) {
-    occurrences.push(event.getOccurrenceDetails(next));
+    iterations++;
+    if (iterations > MAX_RECURRENCE_ITERATIONS) {
+      throw new RangeError(
+        `Recurring event ${event.uid} expands beyond ${MAX_RECURRENCE_ITERATIONS} occurrences before the period ends`,
+      );
+    }
+    if (next.compare(windowStart) >= 0 || modified.has(next.toString())) {
+      occurrences.push(event.getOccurrenceDetails(next));
+    }
   }
   return occurrences;
 }
@@ -113,9 +139,21 @@ function occurrencesOf(event: ICAL.Event, period: Period): Occurrence[] {
  */
 export function parseEvents(ics: string, period: Period): CalendarEvent[] {
   const calendar = new ICAL.Component(ICAL.parse(ics));
-  for (const zone of calendar.getAllSubcomponents("vtimezone")) {
-    ICAL.TimezoneService.register(zone);
+  // The zone registry is global to the isolate; scope it to this calendar
+  try {
+    for (const zone of calendar.getAllSubcomponents("vtimezone")) {
+      ICAL.TimezoneService.register(zone);
+    }
+    return expandEvents(calendar, period);
+  } finally {
+    ICAL.TimezoneService.reset();
   }
+}
+
+function expandEvents(
+  calendar: ICAL.Component,
+  period: Period,
+): CalendarEvent[] {
   const components = calendar.getAllSubcomponents("vevent");
   const isException = (component: ICAL.Component) =>
     component.hasProperty("recurrence-id");
@@ -130,16 +168,25 @@ export function parseEvents(ics: string, period: Period): CalendarEvent[] {
   const events = [
     ...masters.map((master) => {
       const uid = master.getFirstPropertyValue("uid");
-      return new ICAL.Event(master, {
-        exceptions: exceptions.filter(
-          (c) => c.getFirstPropertyValue("uid") === uid,
+      const overrides = exceptions.filter(
+        (c) => c.getFirstPropertyValue("uid") === uid,
+      );
+      return {
+        event: new ICAL.Event(master, { exceptions: overrides }),
+        modified: new Set(
+          overrides.map((c) =>
+            String(c.getFirstPropertyValue("recurrence-id")),
+          ),
         ),
-      });
+      };
     }),
-    ...orphans.map((orphan) => new ICAL.Event(orphan)),
+    ...orphans.map((orphan) => ({
+      event: new ICAL.Event(orphan),
+      modified: new Set<string>(),
+    })),
   ];
   return events
-    .flatMap((event) => occurrencesOf(event, period))
+    .flatMap(({ event, modified }) => occurrencesOf(event, modified, period))
     .filter((occurrence) => overlaps(occurrence, period))
     .map(toCalendarEvent);
 }

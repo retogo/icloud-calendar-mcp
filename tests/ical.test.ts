@@ -311,4 +311,83 @@ describe("parseEvents: recurring events", () => {
       parseEvents(ics, OCTOBER).map((e) => [e.start, e.end, e.allDay]),
     ).toEqual([["2026-10-25", "2026-10-26", true]]);
   });
+
+  test("includes an occurrence moved into the period from before it", () => {
+    const ics = calendar(
+      "BEGIN:VEVENT",
+      "UID:moved-in",
+      "SUMMARY:Review",
+      "DTSTART:20260901T100000Z",
+      "DTEND:20260901T110000Z",
+      "RRULE:FREQ=WEEKLY;COUNT=3",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:moved-in",
+      "RECURRENCE-ID:20260908T100000Z",
+      "SUMMARY:Review (postponed)",
+      "DTSTART:20261002T100000Z",
+      "DTEND:20261002T110000Z",
+      "END:VEVENT",
+    );
+
+    expect(parseEvents(ics, OCTOBER).map((e) => [e.summary, e.start])).toEqual([
+      ["Review (postponed)", "2026-10-02T10:00:00Z"],
+    ]);
+  });
+
+  test("refuses rules that need too many iterations to reach the period", () => {
+    const ics = calendar(
+      "BEGIN:VEVENT",
+      "UID:flood",
+      "SUMMARY:Flood",
+      "DTSTART:20260101T000000Z",
+      "DURATION:PT1S",
+      "RRULE:FREQ=SECONDLY",
+      "END:VEVENT",
+    );
+
+    expect(() => parseEvents(ics, OCTOBER)).toThrow(
+      "Recurring event flood expands beyond",
+    );
+  });
+});
+
+describe("parseEvents: time zone definitions", () => {
+  test("does not reuse a time zone defined by an earlier calendar", () => {
+    const poisoned = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VTIMEZONE",
+      "TZID:Asia/Tokyo",
+      "BEGIN:STANDARD",
+      "DTSTART:19700101T000000",
+      "TZOFFSETFROM:+0000",
+      "TZOFFSETTO:+0000",
+      "END:STANDARD",
+      "END:VTIMEZONE",
+      "BEGIN:VEVENT",
+      "UID:p",
+      "SUMMARY:Poisoned",
+      "DTSTART;TZID=Asia/Tokyo:20261006T180000",
+      "DTEND;TZID=Asia/Tokyo:20261006T190000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const withoutZone = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      "UID:v",
+      "SUMMARY:Victim",
+      "DTSTART;TZID=Asia/Tokyo:20261006T180000",
+      "DTEND;TZID=Asia/Tokyo:20261006T190000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+    parseEvents(poisoned, OCTOBER);
+    const [victim] = parseEvents(withoutZone, OCTOBER);
+
+    expect(victim?.start).not.toEndWith("+00:00");
+  });
 });
