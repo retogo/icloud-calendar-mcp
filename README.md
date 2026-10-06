@@ -19,16 +19,17 @@ There is no shared public instance. You deploy your own copy to your Cloudflare 
 
 - A Cloudflare account
 - An Apple Account with two-factor authentication
-- [Bun](https://bun.sh) and [Terraform](https://developer.hashicorp.com/terraform) 1.6 or later
+- [Bun](https://bun.sh), [Terraform](https://developer.hashicorp.com/terraform) 1.6 or later, and [jq](https://jqlang.org)
 
 ## Deploy
 
 1. **Create an app-specific password.** Sign in at [account.apple.com](https://account.apple.com), open **Sign-In and Security → App-Specific Passwords**, and generate one. You can revoke it there at any time.
 
-2. **Create a Cloudflare API token.** In the Cloudflare dashboard, create a token with the **Edit Cloudflare Workers** template and export it:
+2. **Sign in to Cloudflare.** Deployment uses your Wrangler login, so no API token is needed:
 
    ```sh
-   export CLOUDFLARE_API_TOKEN=...
+   bun install
+   bunx wrangler login
    ```
 
 3. **Configure.** Copy the example variables and fill them in. `auth_password` is the password you will type on the consent page when connecting a client; use at least 16 characters.
@@ -40,10 +41,11 @@ There is no shared public instance. You deploy your own copy to your Cloudflare 
 4. **Deploy.**
 
    ```sh
-   bun install
    terraform -chdir=terraform init
    bun run deploy
    ```
+
+   `scripts/deploy.sh plan` previews the changes instead. In CI, set `CLOUDFLARE_API_TOKEN` and `TF_VAR_account_id` and the script uses them as is.
 
    The server is served at `https://icloud-calendar-mcp.<your-subdomain>.workers.dev/mcp`. Your `workers.dev` subdomain is shown on the Workers overview page of the dashboard.
 
