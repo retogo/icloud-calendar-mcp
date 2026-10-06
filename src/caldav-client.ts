@@ -53,7 +53,7 @@ const CALENDARS_QUERY = `${XML_DECLARATION}<d:propfind ${NAMESPACES}><d:prop><d:
 
 function eventsQuery(start: Date, end: Date): string {
   const range = `start="${toUtcDateTime(start)}" end="${toUtcDateTime(end)}"`;
-  return `${XML_DECLARATION}<c:calendar-query ${NAMESPACES}><d:prop><d:getetag/><c:calendar-data><c:expand ${range}/></c:calendar-data></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="${EVENT_COMPONENT}"><c:time-range ${range}/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>`;
+  return `${XML_DECLARATION}<c:calendar-query ${NAMESPACES}><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="${EVENT_COMPONENT}"><c:time-range ${range}/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>`;
 }
 
 function toUtcDateTime(date: Date): string {

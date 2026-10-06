@@ -130,9 +130,10 @@ describe("CalDavClient.listEvents", () => {
     ]);
     const [request] = requests;
     expect(request?.headers.get("Depth")).toBe("1");
-    expect(request?.body).toContain(
-      '<c:expand start="20261005T150000Z" end="20261006T150000Z"/>',
-    );
+    // Recurrences are expanded locally; asking the server to expand makes
+    // iCloud drop VTIMEZONE without converting times to UTC
+    expect(request?.body).toContain("<c:calendar-data/>");
+    expect(request?.body).not.toContain("<c:expand");
     expect(request?.body).toContain(
       '<c:time-range start="20261005T150000Z" end="20261006T150000Z"/>',
     );

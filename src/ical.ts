@@ -165,6 +165,78 @@ function occurrencesOf(
   return occurrences;
 }
 
+const INTL_LOCALE = "en-US";
+const HOURS_PER_DAY = 24;
+
+function referencedTimeZones(calendar: ICAL.Component): Set<string> {
+  const tzids = new Set<string>();
+  for (const event of calendar.getAllSubcomponents("vevent")) {
+    for (const property of event.getAllProperties()) {
+      const tzid = property.getParameter("tzid");
+      if (typeof tzid === "string") {
+        tzids.add(tzid);
+      }
+    }
+  }
+  return tzids;
+}
+
+function isIanaTimeZone(tzid: string): boolean {
+  try {
+    new Intl.DateTimeFormat(INTL_LOCALE, { timeZone: tzid });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Seconds that `timeZone` is ahead of UTC at the instant `utcMs` */
+function offsetAt(utcMs: number, formatter: Intl.DateTimeFormat): number {
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(new Date(utcMs))
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const wallMs = Date.UTC(
+    parts.year ?? 0,
+    (parts.month ?? 1) - 1,
+    parts.day ?? 1,
+    (parts.hour ?? 0) % HOURS_PER_DAY,
+    parts.minute ?? 0,
+    parts.second ?? 0,
+  );
+  return Math.round((wallMs - utcMs) / MILLISECONDS_PER_SECOND);
+}
+
+/** An ical.js zone whose offsets come from the runtime's IANA database */
+function intlTimeZone(tzid: string): ICAL.Timezone {
+  const formatter = new Intl.DateTimeFormat(INTL_LOCALE, {
+    timeZone: tzid,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  });
+  const zone = ICAL.Timezone.fromData({ tzid });
+  zone.utcOffset = (time: ICAL.Time) => {
+    const wallMs = Date.UTC(
+      time.year,
+      time.month - 1,
+      time.day,
+      time.hour,
+      time.minute,
+      time.second,
+    );
+    // The offset at the wall time's own instant, refined once for DST shifts
+    const guess = offsetAt(wallMs, formatter);
+    return offsetAt(wallMs - guess * MILLISECONDS_PER_SECOND, formatter);
+  };
+  return zone;
+}
+
 /**
  * Parses calendar data into events overlapping `period`, expanding recurrence
  * rules so that servers which ignore CalDAV `expand` still yield occurrences
@@ -179,6 +251,12 @@ export function parseEvents(
   try {
     for (const zone of calendar.getAllSubcomponents("vtimezone")) {
       ICAL.TimezoneService.register(zone);
+    }
+    // iCloud omits VTIMEZONE; resolve IANA names from the runtime's tz database
+    for (const tzid of referencedTimeZones(calendar)) {
+      if (!ICAL.TimezoneService.has(tzid) && isIanaTimeZone(tzid)) {
+        ICAL.TimezoneService.register(intlTimeZone(tzid));
+      }
     }
     return expandEvents(calendar, period, budget);
   } finally {

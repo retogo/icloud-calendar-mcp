@@ -439,3 +439,85 @@ describe("parseEvents: time zone definitions", () => {
     expect(victim?.start).not.toEndWith("+00:00");
   });
 });
+
+/** Calendar data without VTIMEZONE, as iCloud returns it */
+const withoutTimezones = (...lines: string[]) =>
+  ["BEGIN:VCALENDAR", "VERSION:2.0", ...lines, "END:VCALENDAR"].join("\r\n");
+
+describe("parseEvents: TZID without VTIMEZONE", () => {
+  test("resolves an IANA TZID to its offset and keeps the time zone", () => {
+    const ics = withoutTimezones(
+      "BEGIN:VEVENT",
+      "UID:dinner",
+      "SUMMARY:Dinner",
+      "DTSTART;TZID=Asia/Tokyo:20261006T180000",
+      "DTEND;TZID=Asia/Tokyo:20261006T200000",
+      "END:VEVENT",
+    );
+
+    const [event] = parseEvents(ics, OCTOBER, new RecurrenceBudget());
+
+    expect(event).toMatchObject({
+      start: "2026-10-06T18:00:00+09:00",
+      end: "2026-10-06T20:00:00+09:00",
+      timeZone: "Asia/Tokyo",
+    });
+  });
+
+  test("uses each occurrence's offset across a daylight saving change", () => {
+    const ics = withoutTimezones(
+      "BEGIN:VEVENT",
+      "UID:ny",
+      "SUMMARY:NY call",
+      "DTSTART;TZID=America/New_York:20261027T090000",
+      "DTEND;TZID=America/New_York:20261027T100000",
+      "RRULE:FREQ=WEEKLY;COUNT=2",
+      "END:VEVENT",
+    );
+    const range = {
+      start: new Date("2026-10-26T00:00:00Z"),
+      end: new Date("2026-11-10T00:00:00Z"),
+    };
+
+    expect(
+      parseEvents(ics, range, new RecurrenceBudget()).map((e) => e.start),
+    ).toEqual(["2026-10-27T09:00:00-04:00", "2026-11-03T09:00:00-05:00"]);
+  });
+
+  test("compares occurrences with the period by their real instant", () => {
+    const ics = withoutTimezones(
+      "BEGIN:VEVENT",
+      "UID:edge",
+      "SUMMARY:Edge",
+      "DTSTART;TZID=Asia/Tokyo:20261006T180000",
+      "DTEND;TZID=Asia/Tokyo:20261006T183000",
+      "RRULE:FREQ=DAILY;COUNT=3",
+      "END:VEVENT",
+    );
+    // 18:00 in Tokyo is 09:00Z, inside a period that ends at 10:00Z
+    const period = {
+      start: new Date("2026-10-06T08:00:00Z"),
+      end: new Date("2026-10-06T10:00:00Z"),
+    };
+
+    expect(
+      parseEvents(ics, period, new RecurrenceBudget()).map((e) => e.start),
+    ).toEqual(["2026-10-06T18:00:00+09:00"]);
+  });
+
+  test("leaves a TZID that is not an IANA name as floating time", () => {
+    const ics = withoutTimezones(
+      "BEGIN:VEVENT",
+      "UID:custom",
+      "SUMMARY:Custom",
+      "DTSTART;TZID=My Custom Zone:20261006T180000",
+      "DTEND;TZID=My Custom Zone:20261006T190000",
+      "END:VEVENT",
+    );
+
+    const [event] = parseEvents(ics, OCTOBER, new RecurrenceBudget());
+
+    expect(event?.start).toBe("2026-10-06T18:00:00");
+    expect(event).not.toHaveProperty("timeZone");
+  });
+});

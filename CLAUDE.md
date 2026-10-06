@@ -36,6 +36,7 @@ Run test, typecheck, and lint before committing.
 - Test-first: add a failing test in `tests/` before changing behavior.
 - All code, comments, tests, tool descriptions, and UI text are in English.
 - `wrangler.jsonc` is the single source for compatibility settings and the rate limit. When adding a binding, add it to both `wrangler.jsonc` (for `wrangler dev`) and `terraform/main.tf`.
+- Do not ask the server to expand recurrences (`<c:expand>`). iCloud then drops VTIMEZONE but keeps TZID wall-clock times; `parseEvents` expands locally and resolves IANA TZIDs without a VTIMEZONE from the runtime's `Intl` data. Test fixtures should include calendars without VTIMEZONE.
 - Commit messages use Conventional Commits (`feat:`, `fix:`, `chore:` …).
 
 ## Security invariants
