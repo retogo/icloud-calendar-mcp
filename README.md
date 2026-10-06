@@ -42,10 +42,11 @@ There is no shared public instance. You deploy your own copy to your Cloudflare 
 
    ```sh
    terraform -chdir=terraform init
-   bun run deploy
+   bun run plan     # preview the changes
+   bun run deploy   # apply them
    ```
 
-   `scripts/deploy.sh plan` previews the changes instead. In CI, set `CLOUDFLARE_API_TOKEN` and `TF_VAR_account_id` and the script uses them as is.
+   Both build the Worker first and pass your Wrangler login to Terraform. For other Terraform commands, run `scripts/terraform.sh <command>`. In CI, set `CLOUDFLARE_API_TOKEN` and `TF_VAR_account_id` and they are used as is.
 
    The server is served at `https://icloud-calendar-mcp.<your-subdomain>.workers.dev/mcp`. Your `workers.dev` subdomain is shown on the Workers overview page of the dashboard.
 

@@ -14,7 +14,7 @@ Remote MCP server for iCloud Calendar on Cloudflare Workers. README.md is for us
 | `src/caldav-client.ts`              | Minimal CalDAV client (PROPFIND / REPORT / PUT / DELETE)                                               |
 | `src/multistatus.ts`, `src/ical.ts` | WebDAV multistatus XML and iCalendar parsing/building                                                  |
 | `terraform/`                        | Deployment. Reads runtime settings from `wrangler.jsonc`                                               |
-| `scripts/deploy.sh`                 | Builds, then runs Terraform with credentials taken from the Wrangler login                             |
+| `scripts/terraform.sh`              | Builds, then runs Terraform with credentials taken from the Wrangler login                             |
 | `scripts/smoke.sh`                  | End-to-end check of OAuth and MCP against a running server                                             |
 
 ## Commands
@@ -25,7 +25,8 @@ bun run typecheck   # regenerates worker-configuration.d.ts, then tsc for src an
 bun run lint        # biome + terraform fmt
 bun run dev         # wrangler dev on :8787, secrets from .dev.vars (see .dev.vars.example)
 bun run build       # bundle to dist/index.js for Terraform
-scripts/deploy.sh plan   # preview infrastructure changes (bun run deploy applies them)
+bun run plan        # build, then terraform plan with the Wrangler login
+bun run deploy      # build, then terraform apply (other commands: scripts/terraform.sh <command>)
 ```
 
 Run test, typecheck, and lint before committing.

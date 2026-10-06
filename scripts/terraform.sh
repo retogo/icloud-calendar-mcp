@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 # Builds the Worker and runs Terraform with the Wrangler login (`wrangler login`) instead of an API token.
-# usage: scripts/deploy.sh [terraform-command ...]   (default: apply)
+# usage: scripts/terraform.sh <terraform-command> [args ...]
 set -euo pipefail
 cd "$(dirname "$0")/.."
-
-if [ $# -eq 0 ]; then
-  set -- apply
-fi
 
 bun run build
 
