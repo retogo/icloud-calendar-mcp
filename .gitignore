@@ -4,5 +4,6 @@ node_modules/
 dist/
 worker-configuration.d.ts
 terraform/.terraform/
-terraform/*.tfstate*
-terraform/terraform.tfvars
+*.tfstate*
+*.tfvars
+*.tfvars.json
