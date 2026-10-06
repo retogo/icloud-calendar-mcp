@@ -98,7 +98,9 @@ export class CalendarTools {
         ),
       ),
     );
-    return events.flat().sort((a, b) => a.start.localeCompare(b.start));
+    return events
+      .flat()
+      .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
   }
 
   async createEvent(

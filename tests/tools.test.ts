@@ -32,8 +32,8 @@ function fakeStore() {
     listEvents: async (calendarUrl) => {
       calls.push(`listEvents ${calendarUrl}`);
       return calendarUrl === WORK.url
-        ? [event(WORK, "2026-10-06T03:00:00Z")]
-        : [event(HOME, "2026-10-06T01:00:00Z")];
+        ? [event(WORK, "2026-10-06T10:00:00+09:00")]
+        : [event(HOME, "2026-10-06T03:00:00Z")];
     },
     createEvent: async (calendarUrl, newEvent, now) => {
       created.push({ calendarUrl, event: newEvent, now });
@@ -51,7 +51,7 @@ function fakeStore() {
 }
 
 describe("CalendarTools.listEvents", () => {
-  test("returns events from all calendars sorted by start when no calendar is given", async () => {
+  test("returns events from all calendars in chronological order across offsets", async () => {
     const { tools } = fakeStore();
 
     const events = await tools.listEvents({
@@ -60,8 +60,8 @@ describe("CalendarTools.listEvents", () => {
     });
 
     expect(events.map((e) => [e.calendar, e.start])).toEqual([
-      ["Home", "2026-10-06T01:00:00Z"],
-      ["Work", "2026-10-06T03:00:00Z"],
+      ["Work", "2026-10-06T10:00:00+09:00"],
+      ["Home", "2026-10-06T03:00:00Z"],
     ]);
   });
 

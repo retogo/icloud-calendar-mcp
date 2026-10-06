@@ -141,7 +141,7 @@ export class CalDavClient {
       const etag = response.props.getetag;
       if (typeof data !== "string") return [];
       const url = new URL(response.href, calendarUrl).href;
-      return parseEvents(data).map((event) => ({
+      return parseEvents(data, { start, end }).map((event) => ({
         url,
         etag: typeof etag === "string" ? etag : "",
         ...event,

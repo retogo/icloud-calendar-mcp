@@ -66,7 +66,11 @@ describe("buildEvent", () => {
     for (const line of ics.split("\r\n")) {
       expect(encoder.encode(line).length).toBeLessThanOrEqual(MAX_LINE_OCTETS);
     }
-    expect(parseEvents(ics)).toEqual([event]);
+    const day = {
+      start: new Date("2026-10-06T00:00:00Z"),
+      end: new Date("2026-10-07T00:00:00Z"),
+    };
+    expect(parseEvents(ics, day)).toEqual([event]);
   });
 
   test("prevents property injection via CR / CRLF in text", () => {
