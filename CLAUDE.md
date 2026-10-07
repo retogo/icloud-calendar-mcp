@@ -47,7 +47,7 @@ Keep these covered by tests when touching the related code:
 - Tools only act on URLs of the owner's calendars (`findCalendar`, `isEventOf` in `src/tools.ts`). This stops a client from sending the iCloud credentials to another host or deleting a whole calendar.
 - iCalendar text escapes `\`, `;`, `,`, and every line break including a bare CR (`escapeText` in `src/ical.ts`).
 - Event periods must be both dates or both offset date-times before they reach `buildEvent` or `applyEventChanges`.
-- `update_event` edits the stored calendar data in place (`applyEventChanges`) rather than rebuilding it, and writes back with `If-Match` on the ETag it read.
+- `update_event` edits the stored calendar data in place (`applyEventChanges`) rather than rebuilding it, and writes back with `If-Match` on the ETag it read. Read that ETag as the DAV `getetag` via `calendar-multiget`, never from a GET's `ETag` header, which can arrive weakened and then never matches.
 - Recurrence expansion is bounded per event and per `list_events` call by one shared `RecurrenceBudget`; an event over budget is skipped and reported in `skipped`, never failing the whole listing. `parseEvents` also resets the global `ICAL.TimezoneService` after each calendar so one calendar's `VTIMEZONE` cannot change another's times.
 - The consent page escapes every client-provided string, shows a logo only for a verified (CIMD) client when it is an `https:` URL on that client's domain, and is served with a CSP that allows no scripts.
 - Authorization fails closed when `AUTH_PASSWORD` is shorter than 16 characters, and password attempts go through the rate limiter first.

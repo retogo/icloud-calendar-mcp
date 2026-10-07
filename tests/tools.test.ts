@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { Calendar, StoredEvent } from "../src/caldav-client.ts";
+import {
+  CalDavError,
+  type Calendar,
+  type StoredEvent,
+} from "../src/caldav-client.ts";
 import type { NewEvent, Period, RecurrenceBudget } from "../src/ical.ts";
 import { type CalendarStore, CalendarTools } from "../src/tools.ts";
 
@@ -62,7 +66,7 @@ function fakeStore() {
     now: () => NOW,
     newUid: () => "generated-uid",
   });
-  return { tools, calls, budgets, periods, created, updated };
+  return { tools, store, calls, budgets, periods, created, updated };
 }
 
 const STORED_ICS = [
@@ -98,6 +102,18 @@ describe("CalendarTools.updateEvent", () => {
     const lines = updated[0]?.split("\r\n");
     expect(lines).toContain("SUMMARY:Weekly sync");
     expect(lines).toContain("DTSTART:20261006T020000Z");
+  });
+
+  test("explains a conflict when the event changed since it was read", async () => {
+    const { tools, store } = fakeStore();
+    const eventUrl = `${WORK.url}a.ics`;
+    store.updateEvent = async (url) => {
+      throw new CalDavError("PUT", url, 412);
+    };
+
+    await expect(tools.updateEvent({ eventUrl, summary: "x" })).rejects.toThrow(
+      `The event changed since it was read; read it again and retry: ${eventUrl}`,
+    );
   });
 
   test("rejects URLs outside the owner's calendars without any request", async () => {

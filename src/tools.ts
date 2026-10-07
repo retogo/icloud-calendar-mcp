@@ -1,4 +1,9 @@
-import type { CalDavClient, Calendar, StoredEvent } from "./caldav-client.ts";
+import {
+  type CalDavClient,
+  CalDavError,
+  type Calendar,
+  type StoredEvent,
+} from "./caldav-client.ts";
 import {
   applyEventChanges,
   type NewEvent,
@@ -65,6 +70,7 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_TIME_WITH_OFFSET =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 const ISO_DATE_LENGTH = 10;
+const PRECONDITION_FAILED = 412;
 const UTC_OFFSET = /(?:Z|([+-])(\d{2}):(\d{2}))$/;
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
@@ -193,7 +199,19 @@ export class CalendarTools {
       { ...text, ...period },
       this.dependencies.now(),
     );
-    await this.store.updateEvent(eventUrl, data, current.etag);
+    try {
+      await this.store.updateEvent(eventUrl, data, current.etag);
+    } catch (error) {
+      if (
+        error instanceof CalDavError &&
+        error.status === PRECONDITION_FAILED
+      ) {
+        throw new Error(
+          `The event changed since it was read; read it again and retry: ${eventUrl}`,
+        );
+      }
+      throw error;
+    }
     return { updated: eventUrl };
   }
 

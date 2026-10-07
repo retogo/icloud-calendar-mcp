@@ -80,6 +80,17 @@ describe("applyEventChanges", () => {
     expect(lines(ics)).toContain("DTEND;VALUE=DATE:20261011");
   });
 
+  test("accepts LF line endings and writes CRLF", () => {
+    const ics = applyEventChanges(
+      existing.replaceAll("\r\n", "\n"),
+      { summary: "Team dinner" },
+      NOW,
+    );
+
+    expect(lines(ics)).toContain("SUMMARY:Team dinner");
+    expect(lines(ics)).toContain("TRIGGER:-PT15M");
+  });
+
   test("removes a field set to null", () => {
     const ics = applyEventChanges(existing, { location: null }, NOW);
 

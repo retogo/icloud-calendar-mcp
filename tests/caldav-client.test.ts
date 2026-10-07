@@ -174,18 +174,45 @@ describe("CalDavClient.createEvent", () => {
 });
 
 describe("CalDavClient.getEvent", () => {
-  test("returns the calendar data and its ETag", async () => {
-    const { client: caldav } = client({
+  test("reads the calendar data and getetag with calendar-multiget, not the GET header", async () => {
+    const { client: caldav, requests } = client({
+      // A compressed GET can carry a weak ETag that If-Match never matches
       [`GET ${WORK}a.ics`]: () =>
         new Response("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n", {
-          headers: { ETag: '"e1"' },
+          headers: { ETag: 'W/"e1"' },
         }),
+      [`REPORT ${WORK}`]: () =>
+        multistatus(
+          `<d:response><d:href>/123/calendars/work/a.ics</d:href>${ok(
+            '<d:getetag>"e1"</d:getetag><c:calendar-data>BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n</c:calendar-data>',
+          )}</d:response>`,
+        ),
     });
 
-    expect(await caldav.getEvent(`${WORK}a.ics`)).toEqual({
-      data: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
-      etag: '"e1"',
+    const event = await caldav.getEvent(`${WORK}a.ics`);
+
+    expect(event.etag).toBe('"e1"');
+    // XML parsing normalizes CRLF to LF, which iCalendar parsing accepts
+    expect(event.data).toMatch(/^BEGIN:VCALENDAR\r?\nEND:VCALENDAR/);
+    const [request] = requests;
+    expect(request?.method).toBe("REPORT");
+    expect(request?.body).toContain("<c:calendar-multiget");
+    expect(request?.body).toContain(
+      "<d:href>/123/calendars/work/a.ics</d:href>",
+    );
+  });
+
+  test("fails when the event does not exist", async () => {
+    const { client: caldav } = client({
+      [`REPORT ${WORK}`]: () =>
+        multistatus(
+          "<d:response><d:href>/123/calendars/work/missing.ics</d:href><d:status>HTTP/1.1 404 Not Found</d:status></d:response>",
+        ),
     });
+
+    await expect(caldav.getEvent(`${WORK}missing.ics`)).rejects.toThrow(
+      `Event not found: ${WORK}missing.ics`,
+    );
   });
 });
 

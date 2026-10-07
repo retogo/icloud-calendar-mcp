@@ -15,7 +15,7 @@ type RawPropstat = {
 
 type RawResponse = {
   href: string;
-  propstat: RawPropstat[];
+  propstat?: RawPropstat[];
 };
 
 const OK_STATUS = / 200 /;
@@ -41,7 +41,8 @@ export function parseMultistatus(xml: string): DavResponse[] {
     href: response.href,
     props: Object.assign(
       {},
-      ...response.propstat
+      // A response for a missing resource has a status instead of propstats
+      ...(response.propstat ?? [])
         .filter((propstat) => OK_STATUS.test(propstat.status))
         .map((propstat) => propstat.prop),
     ),

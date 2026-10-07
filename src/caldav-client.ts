@@ -53,6 +53,16 @@ const PRINCIPAL_QUERY = `${XML_DECLARATION}<d:propfind ${NAMESPACES}><d:prop><d:
 const HOME_SET_QUERY = `${XML_DECLARATION}<d:propfind ${NAMESPACES}><d:prop><c:calendar-home-set/></d:prop></d:propfind>`;
 const CALENDARS_QUERY = `${XML_DECLARATION}<d:propfind ${NAMESPACES}><d:prop><d:displayname/><d:resourcetype/><ic:calendar-color/><c:supported-calendar-component-set/></d:prop></d:propfind>`;
 
+function multigetQuery(path: string): string {
+  return `${XML_DECLARATION}<c:calendar-multiget ${NAMESPACES}><d:prop><d:getetag/><c:calendar-data/></d:prop><d:href>${escapeXml(path)}</d:href></c:calendar-multiget>`;
+}
+
+const XML_SPECIALS = /[&<>"']/g;
+
+function escapeXml(value: string): string {
+  return value.replace(XML_SPECIALS, (char) => `&#${char.charCodeAt(0)};`);
+}
+
 function eventsQuery(start: Date, end: Date): string {
   const range = `start="${toUtcDateTime(start)}" end="${toUtcDateTime(end)}"`;
   return `${XML_DECLARATION}<c:calendar-query ${NAMESPACES}><d:prop><d:getetag/><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="${EVENT_COMPONENT}"><c:time-range ${range}/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>`;
@@ -177,13 +187,28 @@ export class CalDavClient {
     return url;
   }
 
+  /**
+   * Reads the event with calendar-multiget so the ETag is the DAV getetag.
+   * A GET's ETag header can arrive weakened (e.g. by compression), and
+   * If-Match never matches a weak ETag.
+   */
   async getEvent(eventUrl: string): Promise<{ data: string; etag: string }> {
-    const response = await this.request("GET", eventUrl, {});
-    const etag = response.headers.get("ETag");
-    if (etag === null) {
-      throw new Error(`GET ${eventUrl} returned no ETag`);
+    const calendarUrl = new URL(".", eventUrl).href;
+    const responses = await this.multistatus(
+      "REPORT",
+      calendarUrl,
+      "1",
+      multigetQuery(new URL(eventUrl).pathname),
+    );
+    const found = responses.find(
+      (response) => new URL(response.href, calendarUrl).href === eventUrl,
+    );
+    const data = found?.props["calendar-data"];
+    const etag = found?.props.getetag;
+    if (typeof data !== "string" || typeof etag !== "string") {
+      throw new Error(`Event not found: ${eventUrl}`);
     }
-    return { data: await response.text(), etag };
+    return { data, etag };
   }
 
   /** Replaces the event only if it still has `etag`, so concurrent edits are not lost */
