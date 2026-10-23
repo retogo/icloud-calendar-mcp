@@ -20,7 +20,7 @@ There is no shared public instance. You deploy your own copy to your Cloudflare 
 
 - A Cloudflare account
 - An Apple Account with two-factor authentication
-- [Bun](https://bun.sh), [Terraform](https://developer.hashicorp.com/terraform) 1.6 or later, and [jq](https://jqlang.org)
+- [Bun](https://bun.sh), and [jq](https://jqlang.org) for `scripts/smoke.sh`
 
 ## Deploy
 
@@ -33,25 +33,21 @@ There is no shared public instance. You deploy your own copy to your Cloudflare 
    bunx wrangler login
    ```
 
-3. **Configure.** Copy the example variables and fill them in. `auth_password` is the password you will type on the consent page when connecting a client; use at least 16 characters.
+3. **Configure.** Copy the example secrets and fill them in. `AUTH_PASSWORD` is the password you will type on the consent page when connecting a client; use at least 16 characters.
 
    ```sh
-   cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+   cp .dev.vars.example .dev.vars
    ```
 
-4. **Deploy.**
+4. **Deploy.** The first deploy uploads the secrets from `.dev.vars` and creates the KV namespace for OAuth state:
 
    ```sh
-   terraform -chdir=terraform init
-   bun run plan     # preview the changes
-   bun run deploy   # apply them
+   bun run deploy --secrets-file .dev.vars
    ```
-
-   Both build the Worker first and pass your Wrangler login to Terraform. For other Terraform commands, run `scripts/terraform.sh <command>`. In CI, set `CLOUDFLARE_API_TOKEN` and `TF_VAR_account_id` and they are used as is.
 
    The server is served at `https://icloud-calendar-mcp.<your-subdomain>.workers.dev/mcp`. Your `workers.dev` subdomain is shown on the Workers overview page of the dashboard.
 
-`terraform.tfvars` and the Terraform state contain your secrets. Both are git-ignored; keep them private, and keep the state in `terraform/` so later deploys update the same resources.
+`.dev.vars` is git-ignored and is also what `bun run dev` reads; keep it private. Later deploys keep the uploaded secrets and the KV namespace, so they need no flags. To change a secret, run `bunx wrangler secret put <NAME>`.
 
 To update to a newer version:
 
