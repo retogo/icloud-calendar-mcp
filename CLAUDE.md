@@ -29,7 +29,12 @@ bun run plan        # build, then terraform plan with the Wrangler login
 bun run deploy      # build, then terraform apply (other commands: scripts/terraform.sh <command>)
 ```
 
-Run test, typecheck, and lint before committing.
+Run test, typecheck, and lint before committing. CI (`.github/workflows/ci.yml`) runs the same plus `bun run build` on every pull request and on `main`.
+
+## Dependency updates
+
+- Dependabot (`.github/dependabot.yml`) opens one grouped pull request per ecosystem (bun, GitHub Actions, Terraform providers) every Monday, and only for releases at least 7 days old.
+- Dependabot security updates are intentionally off, so no bot pull request skips that wait. Dependabot alerts are on: when one reports a vulnerability that cannot wait, update by hand (`bun update <package>` or `bun add <package>@<version>`), run the checks, and open a pull request like any other change.
 
 ## Conventions
 
