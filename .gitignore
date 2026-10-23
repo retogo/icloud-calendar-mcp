@@ -3,7 +3,3 @@ node_modules/
 .dev.vars
 dist/
 worker-configuration.d.ts
-terraform/.terraform/
-*.tfstate*
-*.tfvars
-*.tfvars.json
